@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Przetwarzanie Obrazów - BIO-2025</title>
+  <style>
+    img { max-height: 300px; margin: 10px; }
+    .images { display: flex; gap: 40px; margin-top: 30px; justify-content: space-around; }
+    .image-block { text-align: center; flex: 1; }
+    .histogram { height: 250px; display: block; margin: 10px auto; }
+  </style>
+</head>
+<body>
+  <h1>Upload Image and Apply Filters</h1>
+
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <label>Choose image:</label>
+    <input type="file" name="image" required>
+    <input type="submit" value="Upload">
+  </form><br>
+
+  {% if original_file %}
+  <form method="POST" action="/set_operation">
+    <label>Operation:</label>
+    <select name="operation" id="operation-select">
+      <option value="grayscale" {% if selected_operation == 'grayscale' %}selected{% endif %}>Grayscale</option>
+      <option value="brightness" {% if selected_operation == 'brightness' %}selected{% endif %}>Brightness</option>
+      <option value="contrast" {% if selected_operation == 'contrast' %}selected{% endif %}>Contrast</option>
+      <option value="negative" {% if selected_operation == 'negative' %}selected{% endif %}>Negative</option>
+      <option value="binarize" {% if selected_operation == 'binarize' %}selected{% endif %}>Binarize</option>
+      <option value="average" {% if selected_operation == 'average' %}selected{% endif %}>Average Filter</option>
+      <option value="gaussian" {% if selected_operation == 'gaussian' %}selected{% endif %}>Gaussian Filter</option>
+      <option value="sharpen" {% if selected_operation == 'sharpen' %}selected{% endif %}>Sharpen Filter</option>
+    </select><br><br>
+
+    <div id="grayscale-options" style="display:none;">
+      <label>Grayscale method:</label>
+      <select name="grayscale_method">
+        <option value="luminosity" {% if grayscale_method == 'luminosity' %}selected{% endif %}>Luminosity</option>
+        <option value="average" {% if grayscale_method == 'average' %}selected{% endif %}>Average</option>
+        <option value="lightness" {% if grayscale_method == 'lightness' %}selected{% endif %}>Lightness</option>
+      </select><br><br>
+    </div>
+
+    <label>Value: <span id="slider-value">{{ slider_value }}</span></label><br>
+    <input type="range" name="value" id="slider" min="-100" max="255" step="1" value="{{ slider_value }}"><br><br>
+
+    <div id="matrix-config" style="display:none;">
+      <label>Matrix size:</label>
+      <select id="matrix-size" name="matrix_size">
+<option value="3" {% if matrix_size == 3 %}selected{% endif %}>3x3</option>
+<option value="5" {% if matrix_size == 5 %}selected{% endif %}>5x5</option>
+<option value="7" {% if matrix_size == 7 %}selected{% endif %}>7x7</option>
+<option value="9" {% if matrix_size == 9 %}selected{% endif %}>9x9</option>
+<option value="11" {% if matrix_size == 11 %}selected{% endif %}>11x11</option>
+<option value="13" {% if matrix_size == 13 %}selected{% endif %}>13x13</option>
+<option value="15" {% if matrix_size == 15 %}selected{% endif %}>15x15</option>
+<option value="17" {% if matrix_size == 17 %}selected{% endif %}>17x17</option>
+<option value="19" {% if matrix_size == 19 %}selected{% endif %}>19x19</option>
+<option value="21" {% if matrix_size == 21 %}selected{% endif %}>21x21</option>
+<option value="23" {% if matrix_size == 23 %}selected{% endif %}>23x23</option>
+<option value="25" {% if matrix_size == 25 %}selected{% endif %}>25x25</option>
+<option value="27" {% if matrix_size == 27 %}selected{% endif %}>27x27</option>
+<option value="29" {% if matrix_size == 29 %}selected{% endif %}>29x29</option>
+<option value="31" {% if matrix_size == 31 %}selected{% endif %}>31x31</option>
+
+      </select><br><br>
+    </div>
+
+    <button type="submit">Apply Filter</button>
+  </form>
+
+  <div class="images">
+    <div class="image-block">
+      <h3>Original</h3>
+      <img src="{{ url_for('uploaded_image', filename=original_file) }}">
+      {% if original_hist %}
+        <img src="{{ url_for('static', filename=original_hist) }}" class="histogram">
+      {% endif %}
+    </div>
+    <div class="image-block">
+      <h3>Filtered (My Method)</h3>
+      {% if result_file %}
+        <img src="{{ url_for('result_image', filename=result_file) }}">
+        <img src="{{ url_for('static', filename=processed_hist) }}" class="histogram">
+        <br><a href="{{ url_for('download_image', filename=result_file) }}">Download</a>
+      {% endif %}
+    </div>
+    <div class="image-block">
+      <h3>Filtered (OpenCV)</h3>
+      {% if opencv_file %}
+        <img src="{{ url_for('result_image', filename=opencv_file) }}">
+        {% if opencv_hist %}
+          <img src="{{ url_for('static', filename=opencv_hist) }}" class="histogram">
+        {% endif %}
+        <br><a href="{{ url_for('download_image', filename=opencv_file) }}">Download</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <script>
+    const opSelect = document.getElementById('operation-select');
+    const grayOptions = document.getElementById('grayscale-options');
+    const slider = document.getElementById('slider');
+    const sliderVal = document.getElementById('slider-value');
+    const matrixConfig = document.getElementById('matrix-config');
+
+    function updateControls() {
+      const op = opSelect.value;
+      grayOptions.style.display = (op === 'grayscale' || op === 'binarize') ? 'block' : 'none';
+      matrixConfig.style.display = ['average', 'gaussian', 'sharpen'].includes(op) ? 'block' : 'none';
+      slider.disabled = !['brightness', 'contrast', 'binarize'].includes(op);
+
+      if (op === 'brightness') {
+        slider.min = -100;
+        slider.max = 100;
+        slider.step = 1;
+      } else if (op === 'contrast') {
+        slider.min = 0.1;
+        slider.max = 3;
+        slider.step = 0.1;
+      } else if (op === 'binarize') {
+        slider.min = 0;
+        slider.max = 255;
+        slider.step = 1;
+      }
+    }
+
+    slider.addEventListener('input', () => {
+      sliderVal.textContent = slider.value;
+    });
+
+    opSelect.addEventListener('change', updateControls);
+    window.onload = updateControls;
+  </script>
+</body>
+</html>
